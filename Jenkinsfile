@@ -3,43 +3,42 @@ pipeline {
     tools{
         maven 'localMaven'
     }
-    stages{
+    parameters {
+         string(name: 'tomcat_dev', defaultValue: '3.16.24.254', description: 'Staging Server')
+         string(name: 'tomcat_prod', defaultValue: '52.14.166.34', description: 'Production Server')
+    }
+
+    triggers {
+         pollSCM('* * * * *')
+     }
+
+stages{
         stage('Build'){
             steps {
                 sh 'mvn clean package'
             }
             post {
                 success {
-                    echo 'Now Archiving Artifacts...'
+                    echo 'Now Archiving...'
                     archiveArtifacts artifacts: '**/*.war'
                 }
             }
         }
-        stage ('Deploy to Staging'){
-            steps {
-                build job: 'Deploy-to-staging'
-            }
-        }
 
-        stage ('Deploy to Production'){
-            steps{
-                timeout(time:5, unit:'DAYS'){
-                    input message:'Approve PRODUCTION Deployment?'
+        stage ('Deployments'){
+            parallel{
+                stage ('Deploy to Staging'){
+                    steps {
+                        sh "scp -i /home/rwalk/tomcat-demo.pem **/*.war ec2-user@${params.tomcat_dev}:/var/lib/tomcat7/webapps"
+                    }
                 }
 
-                build job: 'Deploy-to-Prod'
-            }
-            post {
-                success {
-                    echo 'Code deployed to Production.'
-                }
-
-                failure {
-                    echo ' Deployment failed.'
+                stage ("Deploy to Production"){
+                    steps {
+                        sh "scp -i /home/rwalk/tomcat-demo.pem **/*.war ec2-user@${params.tomcat_prod}:/var/lib/tomcat7/webapps"
+                    }
                 }
             }
         }
-
-
     }
 }
